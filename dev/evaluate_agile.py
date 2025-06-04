@@ -5,8 +5,13 @@ import json
 import multiprocessing as mp
 import os
 import resource
+import sys
 
 import matplotlib.pyplot as plt
+
+# Ensure the local pyperplan package is importable when running this
+# script directly from the ``dev`` directory.
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
 from pyperplan import heuristics, planner, search
 
