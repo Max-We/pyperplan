@@ -14,12 +14,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
+"""Goal count heuristic."""
 
-from .a_star import astar_search, greedy_best_first_search, weighted_astar_search
-from .breadth_first_search import breadth_first_search
-from .enforced_hillclimbing_search import enforced_hillclimbing_search
-from .gbfs import gbfs_search
-from .guct import guct_normal2_search, guct_normal_search
-from .iterative_deepening_search import iterative_deepening_search
-from .sat import sat_solve
-from .searchspace import make_child_node, make_root_node
+from .heuristic_base import Heuristic
+
+
+class GoalCountHeuristic(Heuristic):
+    """Counts the number of unsatisfied goal facts."""
+
+    def __init__(self, task):
+        super().__init__()
+        self.goals = set(task.goals)
+
+    def __call__(self, node):
+        state = set(node.state)
+        return len(self.goals - state)
