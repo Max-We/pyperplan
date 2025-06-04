@@ -14,23 +14,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
+"""Goal count heuristic."""
 
-"""Convenience imports for heuristic implementations."""
-
-from .blind import BlindHeuristic
-from .goalcount import GoalCountHeuristic
-from .landmarks import LandmarkHeuristic
-from .lm_cut import LmCutHeuristic
-from .relaxation import hAddHeuristic, hFFHeuristic, hMaxHeuristic, hSAHeuristic
+from .heuristic_base import Heuristic
 
 
-__all__ = [
-    "BlindHeuristic",
-    "GoalCountHeuristic",
-    "LandmarkHeuristic",
-    "LmCutHeuristic",
-    "hAddHeuristic",
-    "hFFHeuristic",
-    "hMaxHeuristic",
-    "hSAHeuristic",
-]
+class GoalCountHeuristic(Heuristic):
+    """Counts the number of unsatisfied goal facts."""
+
+    def __init__(self, task):
+        super().__init__()
+        self.goals = set(task.goals)
+
+    def __call__(self, node):
+        state = set(node.state)
+        return len(self.goals - state)
