@@ -142,6 +142,8 @@ def evaluate():
 def plot_results(results):
     limits = range(1, MAX_EXPANSIONS)
     for name, runs in results.items():
+        if "h-ff" not in name:
+            continue
         solved_counts = []
         for lim in limits:
             solved_counts.append(sum(1 for r in runs if r <= lim))
