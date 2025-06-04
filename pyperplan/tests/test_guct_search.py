@@ -1,4 +1,9 @@
-from pyperplan.search import guct_normal2_search, guct_normal_search
+from pyperplan.search import (
+    guct_normal2_search,
+    guct_normal_search,
+    guct_power_search,
+    guct_uniform_search,
+)
 from pyperplan.tests import dummy_task
 
 
@@ -15,6 +20,12 @@ def test_guct_at_goal():
     plan2, expansions2 = _run(guct_normal2_search, task)
     assert plan2 == []
     assert expansions2 >= 1
+    plan3, expansions3 = _run(guct_power_search, task)
+    assert plan3 == []
+    assert expansions3 >= 1
+    plan4, expansions4 = _run(guct_uniform_search, task)
+    assert plan4 == []
+    assert expansions4 >= 1
 
 
 def test_guct_three_step():
@@ -25,6 +36,12 @@ def test_guct_three_step():
     plan2, exp2 = _run(guct_normal2_search, task)
     assert plan2 is not None and len(plan2) == 3
     assert exp2 >= len(plan2)
+    plan3, exp3 = _run(guct_power_search, task)
+    assert plan3 is not None and len(plan3) == 3
+    assert exp3 >= len(plan3)
+    plan4, exp4 = _run(guct_uniform_search, task)
+    assert plan4 is not None and len(plan4) == 3
+    assert exp4 >= len(plan4)
 
 
 def test_guct_no_solution():
@@ -35,3 +52,9 @@ def test_guct_no_solution():
     plan2, exp2 = _run(guct_normal2_search, task)
     assert plan2 is None
     assert exp2 == 50
+    plan3, exp3 = _run(guct_power_search, task)
+    assert plan3 is None
+    assert exp3 == 50
+    plan4, exp4 = _run(guct_uniform_search, task)
+    assert plan4 is None
+    assert exp4 == 50

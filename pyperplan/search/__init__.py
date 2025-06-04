@@ -19,7 +19,12 @@ from .a_star import astar_search, greedy_best_first_search, weighted_astar_searc
 from .breadth_first_search import breadth_first_search
 from .enforced_hillclimbing_search import enforced_hillclimbing_search
 from .gbfs import gbfs_search
-from .guct import guct_normal2_search, guct_normal_search
+from .guct import (
+    guct_normal2_search,
+    guct_normal_search,
+    guct_power_search,
+    guct_uniform_search,
+)
 from .iterative_deepening_search import iterative_deepening_search
 from .sat import sat_solve
 from .searchspace import make_child_node, make_root_node

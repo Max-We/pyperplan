@@ -29,6 +29,8 @@ SEARCHES = {
     "gbfs": search.gbfs_search,
     "guct-normal": search.guct_normal_search,
     "guct-normal2": search.guct_normal2_search,
+    "guct-power": search.guct_power_search,
+    "guct-uniform": search.guct_uniform_search,
 }
 
 MAX_GROUND_TIME = 60  # seconds
