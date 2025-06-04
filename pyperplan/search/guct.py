@@ -54,35 +54,32 @@ def _stddev(stats: _Stats) -> float:
     return math.sqrt(_variance(stats))
 
 
-def _score_ucb_normal(stats: _Stats, total: int) -> float:
+def _score_lcb_normal(stats: _Stats, total: int) -> float:
     n = stats.visits
     if n == 0:
         return float("-inf")
-    return stats.mean - math.sqrt(2 * math.log(total) / n) - (
-        3 * _variance(stats) * math.log(total) / n
-    )
+    return stats.mean - _stddev(stats) * math.sqrt((16 * math.log(total)) / n)
 
 
-def _score_ucb_normal2(stats: _Stats, total: int) -> float:
-    n = stats.visits
-    if n == 0:
+def _score_lcb_normal2(stats: _Stats, total: int) -> float:
+    if total == 0:
         return float("-inf")
-    return stats.mean - _stddev(stats) * math.sqrt(2 * math.log(total) / n)
+    return stats.mean - _stddev(stats) * math.sqrt(2 * math.log(total))
 
 
 def _score_lcb_uniform(stats: _Stats, total: int) -> float:
     n = stats.visits
-    return (stats.max_val + stats.min_val) / 2 - (
-        stats.max_val - stats.min_val
-    ) * math.sqrt(6 * math.log(total) / n)
+    if total == 0:
+        return float("-inf")
+    return (stats.max_val - stats.min_val) / 2 - (stats.max_val - stats.min_val) * math.sqrt(6 * n * math.log(total))
 
 
 def _score_lcb_power(stats: _Stats, total: int) -> float:
     n = stats.visits
     a_hat = 1.0
-    return (stats.max_val * a_hat) / (a_hat + 1) + stats.max_val * math.sqrt(
-        6 * math.log(total) / n
-    )
+    if total == 0:
+        return float("-inf")
+    return (stats.max_val * a_hat) / (a_hat + 1) - stats.max_val * math.sqrt(6 * n * math.log(total))
 
 
 def _guct_search(task, heuristic, score_fun, max_expansions=None):
@@ -136,13 +133,13 @@ def _guct_search(task, heuristic, score_fun, max_expansions=None):
 def guct_normal_search(task, heuristic, max_expansions=None):
     """GUCT search variant using UCB1-Normal."""
 
-    return _guct_search(task, heuristic, _score_ucb_normal, max_expansions)
+    return _guct_search(task, heuristic, _score_lcb_normal, max_expansions)
 
 
 def guct_normal2_search(task, heuristic, max_expansions=None):
     """GUCT search variant using UCB1-Normal2."""
 
-    return _guct_search(task, heuristic, _score_ucb_normal2, max_expansions)
+    return _guct_search(task, heuristic, _score_lcb_normal2, max_expansions)
 
 
 def guct_uniform_search(task, heuristic, max_expansions=None):
