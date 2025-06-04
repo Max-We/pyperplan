@@ -6,6 +6,7 @@ import multiprocessing as mp
 import os
 import resource
 import sys
+from queue import Empty # For mp.Queue.get() timeout
 
 import matplotlib.pyplot as plt
 
@@ -37,28 +38,62 @@ RESULTS_FILE = "evaluation_results.json"
 
 
 def _ground_worker(domain_file, problem_file, queue):
-    resource.setrlimit(resource.RLIMIT_AS, (MAX_GROUND_MEMORY, MAX_GROUND_MEMORY))
-    problem = planner._parse(domain_file, problem_file)
-    task = planner._ground(problem)
-    queue.put(task)
+    try:
+        resource.setrlimit(resource.RLIMIT_AS, (MAX_GROUND_MEMORY, MAX_GROUND_MEMORY))
+    except Exception as e:
+        print(f"Warning: Could not set memory rlimit for {problem_file} in worker: {e}", file=sys.stderr)
+
+    try:
+        problem = planner._parse(domain_file, problem_file)
+        if problem:
+            task = planner._ground(problem)
+            queue.put(task)
+        else:
+            print(f"  Parsing failed for {problem_file}, putting None on queue.", file=sys.stderr)
+            queue.put(None)
+    except Exception as e:
+        print(f"  Exception in _ground_worker for {problem_file}: {e}", file=sys.stderr)
+        queue.put(None)
 
 
 def ground_problem(domain_file, problem_file):
     queue = mp.Queue(1)
     proc = mp.Process(target=_ground_worker, args=(domain_file, problem_file, queue))
     proc.start()
+
+    task = None
+    timed_out = False
+
     proc.join(MAX_GROUND_TIME)
-    timed_out = proc.is_alive()
-    if timed_out:
+
+    if proc.is_alive():
+        timed_out = True
+        print(f"  Process for {problem_file} grounding timed out after {MAX_GROUND_TIME}s. Terminating.")
         proc.terminate()
-        proc.join()
-    if queue.empty():
-        queue.close()
-        return None, timed_out
-    task = queue.get()
-    proc.join()
+        proc.join(timeout=5)
+        if proc.is_alive():
+            print(f"  Warning: Process for {problem_file} did not terminate gracefully after SIGTERM and 5s wait.", file=sys.stderr)
+    else:
+        exit_code = proc.exitcode
+        if exit_code == 0:
+            try:
+                task = queue.get(block=True, timeout=2)
+            except Empty:
+                print(f"  Process for {problem_file} finished but queue was empty (timeout on get).", file=sys.stderr)
+                task = None
+            except Exception as e:
+                print(f"  Error getting from queue for {problem_file}: {e}", file=sys.stderr)
+                task = None
+        else:
+            print(f"  Process for {problem_file} grounding exited with code {exit_code}.", file=sys.stderr)
+            task = None
+
     queue.close()
-    return task, False
+    queue.join_thread()
+
+    if not timed_out and task is not None:
+        return task, False # Mimics original successful return where second element is explicitly False
+    return task, timed_out # Covers timeout cases and task is None cases
 
 
 def run_configuration(task, search_fun, heuristic_cls):
@@ -75,7 +110,8 @@ def evaluate():
         with open(RESULTS_FILE, "w") as fh:
             json.dump(results, fh, indent=2)
 
-    benchmark_dirs = [d for d in glob.glob("benchmarks/*") if os.path.isdir(d)]
+    benchmark_dirs = [d for d in glob.glob("../benchmarks/*") if os.path.isdir(d)]
+    # benchmark_dirs = benchmark_dirs[1:]
     for bdir in benchmark_dirs:
         problems = sorted(glob.glob(os.path.join(bdir, "task*.pddl")))
         for prob in problems:
@@ -87,7 +123,7 @@ def evaluate():
                     print("  Grounding timed out")
                 else:
                     print("  Grounding failed")
-                continue
+                break
             for hname, hcls in HEURISTICS.items():
                 for sname, sfun in SEARCHES.items():
                     print(f"  {hname} with {sname}")
@@ -96,13 +132,13 @@ def evaluate():
                         exp if solved else MAX_EXPANSIONS
                     )
                     dump_results()
-    dump_results()
-    plot_results(results)
+            plot_results(results)
+
     print("Evaluation finished.")
 
 
 def plot_results(results):
-    limits = range(1, MAX_EXPANSIONS + 1)
+    limits = range(1, MAX_EXPANSIONS)
     for name, runs in results.items():
         solved_counts = []
         for lim in limits:
