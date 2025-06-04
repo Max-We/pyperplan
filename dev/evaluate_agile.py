@@ -49,10 +49,17 @@ def ground_problem(domain_file, problem_file):
     proc.join(MAX_GROUND_TIME)
     if proc.is_alive():
         proc.terminate()
+        proc.join()
+        queue.close()
         return None
     if queue.empty():
+        proc.join()
+        queue.close()
         return None
-    return queue.get()
+    task = queue.get()
+    proc.join()
+    queue.close()
+    return task
 
 
 def run_configuration(task, search_fun, heuristic_cls):
@@ -73,12 +80,14 @@ def evaluate():
     for bdir in benchmark_dirs:
         problems = sorted(glob.glob(os.path.join(bdir, "task*.pddl")))
         for prob in problems:
+            print(f"Solving {prob}...")
             domain = planner.find_domain(prob)
             task = ground_problem(domain, prob)
             if task is None:
                 continue
             for hname, hcls in HEURISTICS.items():
                 for sname, sfun in SEARCHES.items():
+                    print(f"  {hname} with {sname}")
                     solved, exp = run_configuration(task, sfun, hcls)
                     results[f"{hname}-{sname}"].append(
                         exp if solved else MAX_EXPANSIONS
@@ -86,6 +95,7 @@ def evaluate():
     with open("evaluation_results.json", "w") as fh:
         json.dump(results, fh, indent=2)
     plot_results(results)
+    print("Evaluation finished.")
 
 
 def plot_results(results):
