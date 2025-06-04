@@ -30,9 +30,9 @@ SEARCHES = {
     "guct-normal2": search.guct_normal2_search,
 }
 
-MAX_GROUND_TIME = 300  # seconds
+MAX_GROUND_TIME = 60  # seconds
 MAX_GROUND_MEMORY = 2 * 1024**3  # bytes
-MAX_EXPANSIONS = 10000
+MAX_EXPANSIONS = 1000
 
 
 def _ground_worker(domain_file, problem_file, queue):
@@ -47,19 +47,17 @@ def ground_problem(domain_file, problem_file):
     proc = mp.Process(target=_ground_worker, args=(domain_file, problem_file, queue))
     proc.start()
     proc.join(MAX_GROUND_TIME)
-    if proc.is_alive():
+    timed_out = proc.is_alive()
+    if timed_out:
         proc.terminate()
         proc.join()
-        queue.close()
-        return None
     if queue.empty():
-        proc.join()
         queue.close()
-        return None
+        return None, timed_out
     task = queue.get()
     proc.join()
     queue.close()
-    return task
+    return task, False
 
 
 def run_configuration(task, search_fun, heuristic_cls):
@@ -82,8 +80,12 @@ def evaluate():
         for prob in problems:
             print(f"Solving {prob}...")
             domain = planner.find_domain(prob)
-            task = ground_problem(domain, prob)
+            task, timed_out = ground_problem(domain, prob)
             if task is None:
+                if timed_out:
+                    print("  Grounding timed out")
+                else:
+                    print("  Grounding failed")
                 continue
             for hname, hcls in HEURISTICS.items():
                 for sname, sfun in SEARCHES.items():
