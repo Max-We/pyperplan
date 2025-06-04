@@ -31,19 +31,24 @@ class _Stats:
     m2: float
     min_val: float
     max_val: float
+    log_sum:  float
 
 
 def _make_stats(value: float) -> _Stats:
-    return _Stats(1, value, 0.0, value, value)
+    v = max(value, 1e-9)                       # protect log(0)
+    return _Stats(1, value, 0.0, value, value, math.log(v))
 
 
 def _update_stats(stats: _Stats, value: float) -> None:
+    v = max(value, 1e-9)
     stats.visits += 1
+
     delta = value - stats.mean
     stats.mean += delta / stats.visits
     stats.m2 += delta * (value - stats.mean)
     stats.min_val = min(stats.min_val, value)
     stats.max_val = max(stats.max_val, value)
+    stats.log_sum += math.log(v)
 
 
 def _variance(stats: _Stats) -> float:
@@ -52,6 +57,14 @@ def _variance(stats: _Stats) -> float:
 
 def _stddev(stats: _Stats) -> float:
     return math.sqrt(_variance(stats))
+
+def _a_hat(stats: _Stats) -> float:
+    if stats.visits < 2 or stats.max_val <= 0:
+        return 1.0
+    denom = math.log(stats.max_val) - (stats.log_sum / stats.visits)
+    if denom <= 0.0:
+        return 1.0
+    return 1.0 / denom
 
 
 def _score_lcb_normal(stats: _Stats, total: int) -> float:
@@ -71,12 +84,12 @@ def _score_lcb_uniform(stats: _Stats, total: int) -> float:
     n = stats.visits
     if total == 0:
         return float("-inf")
-    return (stats.max_val - stats.min_val) / 2 - (stats.max_val - stats.min_val) * math.sqrt(6 * n * math.log(total))
+    return (stats.max_val + stats.min_val) / 2 - (stats.max_val - stats.min_val) * math.sqrt(6 * n * math.log(total))
 
 
 def _score_lcb_power(stats: _Stats, total: int) -> float:
     n = stats.visits
-    a_hat = 1.0
+    a_hat = _a_hat(stats)
     if total == 0:
         return float("-inf")
     return (stats.max_val * a_hat) / (a_hat + 1) - stats.max_val * math.sqrt(6 * n * math.log(total))
