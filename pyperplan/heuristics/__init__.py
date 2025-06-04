@@ -14,3 +14,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>
 #
+
+"""Convenience imports for heuristic implementations."""
+
+from .blind import BlindHeuristic
+from .goalcount import GoalCountHeuristic
+from .landmarks import LandmarkHeuristic
+from .lm_cut import LmCutHeuristic
+from .relaxation import hAddHeuristic, hFFHeuristic, hMaxHeuristic, hSAHeuristic
+
+__all__ = [
+    "BlindHeuristic",
+    "GoalCountHeuristic",
+    "LandmarkHeuristic",
+    "LmCutHeuristic",
+    "hAddHeuristic",
+    "hFFHeuristic",
+    "hMaxHeuristic",
+    "hSAHeuristic",
+]
+
