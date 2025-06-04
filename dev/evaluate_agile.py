@@ -20,9 +20,9 @@ from pyperplan import heuristics, planner, search
 
 HEURISTICS = {
     "h-ff": heuristics.hFFHeuristic,
-    "h-add": heuristics.hAddHeuristic,
-    "h-max": heuristics.hMaxHeuristic,
-    "h-gc": heuristics.GoalCountHeuristic,
+    # "h-add": heuristics.hAddHeuristic,
+    # "h-max": heuristics.hMaxHeuristic,
+    # "h-gc": heuristics.GoalCountHeuristic,
 }
 
 SEARCHES = {
@@ -153,6 +153,7 @@ def plot_results(results):
     plt.legend()
     plt.tight_layout()
     plt.savefig("evaluation_plot.png")
+    plt.close()
 
 
 if __name__ == "__main__":
