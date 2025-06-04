@@ -33,6 +33,7 @@ SEARCHES = {
 MAX_GROUND_TIME = 60  # seconds
 MAX_GROUND_MEMORY = 2 * 1024**3  # bytes
 MAX_EXPANSIONS = 1000
+RESULTS_FILE = "evaluation_results.json"
 
 
 def _ground_worker(domain_file, problem_file, queue):
@@ -68,11 +69,11 @@ def run_configuration(task, search_fun, heuristic_cls):
 
 
 def evaluate():
-    results = {}
-    for hname, hcls in HEURISTICS.items():
-        for sname, sfun in SEARCHES.items():
-            key = f"{hname}-{sname}"
-            results[key] = []
+    results = {f"{h}-{s}": [] for h in HEURISTICS for s in SEARCHES}
+
+    def dump_results():
+        with open(RESULTS_FILE, "w") as fh:
+            json.dump(results, fh, indent=2)
 
     benchmark_dirs = [d for d in glob.glob("benchmarks/*") if os.path.isdir(d)]
     for bdir in benchmark_dirs:
@@ -94,8 +95,8 @@ def evaluate():
                     results[f"{hname}-{sname}"].append(
                         exp if solved else MAX_EXPANSIONS
                     )
-    with open("evaluation_results.json", "w") as fh:
-        json.dump(results, fh, indent=2)
+                    dump_results()
+    dump_results()
     plot_results(results)
     print("Evaluation finished.")
 
