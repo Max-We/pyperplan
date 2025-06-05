@@ -1,0 +1,8 @@
+*~
+*.py[cod]
+.tox/
+build/
+dist/
+pyperplan.egg-info/
+.github
+.git
