@@ -66,6 +66,13 @@ def _a_hat(stats: _Stats) -> float:
         return 1.0
     return 1.0 / denom
 
+def _norm_quantile(t):
+    """http://m-hikari.com/ams/ams-2014/ams-85-88-2014/epureAMS85-88-2014.pdf"""
+    alpha = 1 - 1 / t
+
+    q = 10 * math.log(1 - math.log(-math.log(alpha) / math.log(2)) / math.log(22)) / math.log(41)
+
+    return q
 
 def _score_lcb_normal(stats: _Stats, total: int) -> float:
     n = stats.visits
@@ -93,6 +100,12 @@ def _score_lcb_power(stats: _Stats, total: int) -> float:
     if total == 0:
         return float("-inf")
     return (stats.max_val * a_hat) / (a_hat + 1) - stats.max_val * math.sqrt(6 * n * math.log(total))
+
+def _score_lcb_clt(stats: _Stats, total: int) -> float:
+    n = stats.visits
+    if total <= 1 or n == 0:
+        return float("-inf")
+    return stats.mean - _norm_quantile(total) * math.sqrt(_variance(stats)/n)
 
 
 def _guct_search(task, heuristic, score_fun, max_expansions=None):
@@ -165,3 +178,8 @@ def guct_power_search(task, heuristic, max_expansions=None):
     """GUCT search variant using LCB1-Power."""
 
     return _guct_search(task, heuristic, _score_lcb_power, max_expansions)
+
+def guct_clt_search(task, heuristic, max_expansions=None):
+    """GUCT search variant using LCB1-Power."""
+
+    return _guct_search(task, heuristic, _score_lcb_clt, max_expansions)

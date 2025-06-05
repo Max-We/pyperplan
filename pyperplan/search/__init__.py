@@ -24,6 +24,7 @@ from .guct import (
     guct_normal_search,
     guct_power_search,
     guct_uniform_search,
+    guct_clt_search,
 )
 from .iterative_deepening_search import iterative_deepening_search
 from .sat import sat_solve

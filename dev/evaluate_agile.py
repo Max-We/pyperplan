@@ -31,11 +31,12 @@ SEARCHES = {
     "guct-normal2": search.guct_normal2_search,
     "guct-power": search.guct_power_search,
     "guct-uniform": search.guct_uniform_search,
+    "guct-clt": search.guct_clt_search,
 }
 
-MAX_GROUND_TIME = 60  # seconds
+MAX_GROUND_TIME = 300  # seconds
 MAX_GROUND_MEMORY = 2 * 1024**3  # bytes
-MAX_EXPANSIONS = 1000
+MAX_EXPANSIONS = 10000
 RESULTS_FILE = "evaluation_results.json"
 
 
@@ -113,7 +114,9 @@ def evaluate():
             json.dump(results, fh, indent=2)
 
     benchmark_dirs = [d for d in glob.glob("../benchmarks/*") if os.path.isdir(d)]
-    # benchmark_dirs = benchmark_dirs[1:]
+    if not benchmark_dirs:
+        benchmark_dirs = [d for d in glob.glob("benchmarks/*") if os.path.isdir(d)]
+
     for bdir in benchmark_dirs:
         problems = sorted(glob.glob(os.path.join(bdir, "task*.pddl")))
         for prob in problems:
