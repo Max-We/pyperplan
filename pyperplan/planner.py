@@ -32,6 +32,7 @@ SEARCHES = {
     "wastar": search.weighted_astar_search,
     "gbf": search.greedy_best_first_search,
     "gbfs": search.gbfs_search,
+    "guct": search.guct_search,
     "guct-normal": search.guct_normal_search,
     "guct-normal2": search.guct_normal2_search,
     "bfs": search.breadth_first_search,

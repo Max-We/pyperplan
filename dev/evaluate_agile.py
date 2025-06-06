@@ -27,6 +27,7 @@ HEURISTICS = {
 
 SEARCHES = {
     "gbfs": search.gbfs_search,
+    "guct": search.guct_search,
     "guct-normal": search.guct_normal_search,
     "guct-normal2": search.guct_normal2_search,
     "guct-power": search.guct_power_search,

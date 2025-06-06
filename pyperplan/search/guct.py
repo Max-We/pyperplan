@@ -74,6 +74,14 @@ def _norm_quantile(t):
 
     return q
 
+def _score_lcb(stats: _Stats, total: int) -> float:
+    n = stats.visits
+    c = 1.0
+    if n == 0:
+        return float("-inf")
+    return stats.mean - c * math.sqrt(2 * math.log(total) / n)
+
+
 def _score_lcb_normal(stats: _Stats, total: int) -> float:
     n = stats.visits
     if n == 0:
@@ -155,6 +163,10 @@ def _guct_search(task, heuristic, score_fun, max_expansions=None):
     logging.info("%d Nodes expanded" % expansions)
     return None, expansions
 
+def guct_search(task, heuristic, max_expansions=None):
+    """GUCT search variant using UCB1-Normal."""
+
+    return _guct_search(task, heuristic, _score_lcb, max_expansions)
 
 def guct_normal_search(task, heuristic, max_expansions=None):
     """GUCT search variant using UCB1-Normal."""
