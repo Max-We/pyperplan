@@ -7,6 +7,7 @@ import os
 import resource
 import sys
 from queue import Empty # For mp.Queue.get() timeout
+import logging # Added logging import
 
 import matplotlib.pyplot as plt
 
@@ -45,18 +46,19 @@ def _ground_worker(domain_file, problem_file, queue):
     try:
         resource.setrlimit(resource.RLIMIT_AS, (MAX_GROUND_MEMORY, MAX_GROUND_MEMORY))
     except Exception as e:
-        print(f"Warning: Could not set memory rlimit for {problem_file} in worker: {e}", file=sys.stderr)
+        logging.warning(f"Could not set memory rlimit for {problem_file} in worker: {e}")
 
     try:
         problem = planner._parse(domain_file, problem_file)
         if problem:
             task = planner._ground(problem)
+            logging.info("Compiled task successfully for %s", problem_file)
             queue.put(task)
         else:
-            print(f"  Parsing failed for {problem_file}, putting None on queue.", file=sys.stderr)
+            logging.error(f"Parsing failed for {problem_file}, putting None on queue.")
             queue.put(None)
     except Exception as e:
-        print(f"  Exception in _ground_worker for {problem_file}: {e}", file=sys.stderr)
+        logging.exception(f"Exception in _ground_worker for {problem_file}:")
         queue.put(None)
 
 
@@ -72,24 +74,24 @@ def ground_problem(domain_file, problem_file):
 
     if proc.is_alive():
         timed_out = True
-        print(f"  Process for {problem_file} grounding timed out after {MAX_GROUND_TIME}s. Terminating.")
+        logging.warning(f"Process for {problem_file} grounding timed out after {MAX_GROUND_TIME}s. Terminating.")
         proc.terminate()
         proc.join(timeout=5)
         if proc.is_alive():
-            print(f"  Warning: Process for {problem_file} did not terminate gracefully after SIGTERM and 5s wait.", file=sys.stderr)
+            logging.warning(f"Process for {problem_file} did not terminate gracefully after SIGTERM and 5s wait.")
     else:
         exit_code = proc.exitcode
         if exit_code == 0:
             try:
                 task = queue.get(block=True, timeout=2)
             except Empty:
-                print(f"  Process for {problem_file} finished but queue was empty (timeout on get).", file=sys.stderr)
+                logging.warning(f"Process for {problem_file} finished but queue was empty (timeout on get).")
                 task = None
             except Exception as e:
-                print(f"  Error getting from queue for {problem_file}: {e}", file=sys.stderr)
+                logging.error(f"Error getting from queue for {problem_file}: {e}")
                 task = None
         else:
-            print(f"  Process for {problem_file} grounding exited with code {exit_code}.", file=sys.stderr)
+            logging.error(f"Process for {problem_file} grounding exited with code {exit_code}.")
             task = None
 
     queue.close()
@@ -108,6 +110,11 @@ def run_configuration(task, search_fun, heuristic_cls):
 
 
 def evaluate():
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s',
+                        handlers=[logging.StreamHandler(sys.stdout)])
+
+
     results = {f"{h}-{s}": [] for h in HEURISTICS for s in SEARCHES}
 
     def dump_results():
@@ -121,18 +128,18 @@ def evaluate():
     for bdir in benchmark_dirs:
         problems = sorted(glob.glob(os.path.join(bdir, "task*.pddl")))
         for prob in problems:
-            print(f"Solving {prob}...")
+            logging.info(f"Solving {prob}...")
             domain = planner.find_domain(prob)
             task, timed_out = ground_problem(domain, prob)
             if task is None:
                 if timed_out:
-                    print("  Grounding timed out")
+                    logging.warning("  Grounding timed out")
                 else:
-                    print("  Grounding failed")
+                    logging.error("  Grounding failed")
                 break
             for hname, hcls in HEURISTICS.items():
                 for sname, sfun in SEARCHES.items():
-                    print(f"  {hname} with {sname}")
+                    logging.info(f"  {hname} with {sname}")
                     solved, exp = run_configuration(task, sfun, hcls)
                     results[f"{hname}-{sname}"].append(
                         exp if solved else MAX_EXPANSIONS
@@ -140,7 +147,7 @@ def evaluate():
                     dump_results()
             plot_results(results)
 
-    print("Evaluation finished.")
+    logging.info("Evaluation finished.")
 
 
 def plot_results(results):
