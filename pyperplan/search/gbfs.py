@@ -22,13 +22,20 @@ import logging
 from . import a_star, searchspace
 
 
-def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
+def gbfs_search(
+    task,
+    heuristic,
+    max_expansions=None,
+    max_evaluations=None,
+    use_relaxed_plan=False,
+):
     """Search for a plan using greedy best-first search.
 
-    Returns a tuple ``(plan, expansions)`` where ``plan`` is the list of
-    operators leading to the goal or ``None`` if no plan was found and
-    ``expansions`` is the number of expanded nodes.
-    The search stops after ``max_expansions`` node expansions if given.
+    Returns a tuple ``(plan, expansions, evaluations)`` where ``plan`` is the
+    list of operators leading to the goal or ``None`` if no plan was found,
+    ``expansions`` is the number of expanded nodes and ``evaluations`` is the
+    number of heuristic evaluations.  The search stops after ``max_expansions``
+    node expansions or ``max_evaluations`` node evaluations if given.
     """
 
     make_open_entry = a_star.ordered_node_greedy_best_first
@@ -38,6 +45,7 @@ def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
 
     root = searchspace.make_root_node(task.initial_state)
     init_h = heuristic(root)
+    evaluations = 1
     heapq.heappush(open_list, make_open_entry(root, init_h, node_tiebreaker))
     logging.info("Initial h value: %f" % init_h)
 
@@ -46,6 +54,8 @@ def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
 
     while open_list:
         if max_expansions is not None and expansions >= max_expansions:
+            break
+        if max_evaluations is not None and evaluations >= max_evaluations:
             break
         (f, h, _tie, pop_node) = heapq.heappop(open_list)
         if h < besth:
@@ -60,7 +70,7 @@ def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
             if task.goal_reached(pop_state):
                 logging.info("Goal reached. Start extraction of solution.")
                 logging.info("%d Nodes expanded" % expansions)
-                return pop_node.extract_solution(), expansions
+                return pop_node.extract_solution(), expansions, evaluations
             rplan = None
             if use_relaxed_plan:
                 (rh, rplan) = heuristic.calc_h_with_plan(
@@ -69,10 +79,16 @@ def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
                 logging.debug("relaxed plan %s " % rplan)
 
             for op, succ_state in task.get_successor_states(pop_state):
+                if max_evaluations is not None and evaluations >= max_evaluations:
+                    break
                 if use_relaxed_plan and rplan and op.name not in rplan:
                     continue
                 succ_node = searchspace.make_child_node(pop_node, op, succ_state)
                 h_val = heuristic(succ_node)
+                evaluations += 1
+                if max_evaluations is not None and evaluations >= max_evaluations:
+                    # evaluation limit reached after computing heuristic
+                    break
                 if h_val == float("inf"):
                     continue
                 old_succ_g = state_cost.get(succ_state, float("inf"))
@@ -83,6 +99,9 @@ def gbfs_search(task, heuristic, max_expansions=None, use_relaxed_plan=False):
                     )
                     state_cost[succ_state] = succ_node.g
 
+        if max_evaluations is not None and evaluations >= max_evaluations:
+            break
+
     logging.info("No operators left. Task unsolvable or limit reached.")
     logging.info("%d Nodes expanded" % expansions)
-    return None, expansions
+    return None, expansions, evaluations

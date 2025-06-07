@@ -6,11 +6,11 @@ import multiprocessing as mp
 import os
 import resource
 import sys
-from queue import Empty # For mp.Queue.get() timeout
+from queue import Empty  # For mp.Queue.get() timeout
 import logging
 import pickle
-import tempfile # For temporary file creation
-import uuid # For unique filenames
+import tempfile  # For temporary file creation
+import uuid  # For unique filenames
 
 import matplotlib.pyplot as plt
 
@@ -41,9 +41,12 @@ SEARCHES = {
 
 MAX_GROUND_TIME = 300  # seconds
 MAX_GROUND_MEMORY = 2 * 1024**3  # bytes
-MAX_EXPANSIONS = 10000
+MAX_EXPANSIONS = 4000
+MAX_EVALUATIONS = 10000
 RESULTS_FILE = "evaluation_results.json"
-TEMP_DIR = tempfile.mkdtemp(prefix="pyperplan_eval_") # Create a dedicated temp directory
+TEMP_DIR = tempfile.mkdtemp(
+    prefix="pyperplan_eval_"
+)  # Create a dedicated temp directory
 
 
 def _ground_worker(domain_file, problem_file, queue):
@@ -64,10 +67,15 @@ def _ground_worker(domain_file, problem_file, queue):
                 with open(temp_task_file, "wb") as f:
                     pickle.dump(task, f)
                 output_to_queue = {"type": "file", "path": temp_task_file}
-                logging.info(f"Worker for {problem_file}: Saved task to {temp_task_file}. Size: {os.path.getsize(temp_task_file)} bytes.")
-            else: # Grounding returned None
-                 logging.error(f"Worker for {problem_file}: Grounding returned None.")
-                 output_to_queue = {"type": "error", "message": "Grounding returned None"}
+                logging.info(
+                    f"Worker for {problem_file}: Saved task to {temp_task_file}. Size: {os.path.getsize(temp_task_file)} bytes."
+                )
+            else:  # Grounding returned None
+                logging.error(f"Worker for {problem_file}: Grounding returned None.")
+                output_to_queue = {
+                    "type": "error",
+                    "message": "Grounding returned None",
+                }
         else:
             logging.error(f"Worker for {problem_file}: Parsing failed.")
             output_to_queue = {"type": "error", "message": "Parsing failed"}
@@ -79,24 +87,36 @@ def _ground_worker(domain_file, problem_file, queue):
         output_to_queue = {"type": "error", "message": f"Exception: {e}"}
     finally:
         if output_to_queue:
-            logging.info(f"Worker for {problem_file}: Attempting to put result on queue: {output_to_queue}")
+            logging.info(
+                f"Worker for {problem_file}: Attempting to put result on queue: {output_to_queue}"
+            )
             queue.put(output_to_queue)
-            logging.info(f"Worker for {problem_file}: Successfully put result on queue. Exiting worker.")
-        else: # Should not happen if logic is correct
-            logging.error(f"Worker for {problem_file}: No output generated for queue. Putting generic error.")
-            queue.put({"type": "error", "message": "Worker finished without specific output."})
-            logging.info(f"Worker for {problem_file}: Put generic error on queue. Exiting worker.")
+            logging.info(
+                f"Worker for {problem_file}: Successfully put result on queue. Exiting worker."
+            )
+        else:  # Should not happen if logic is correct
+            logging.error(
+                f"Worker for {problem_file}: No output generated for queue. Putting generic error."
+            )
+            queue.put(
+                {"type": "error", "message": "Worker finished without specific output."}
+            )
+            logging.info(
+                f"Worker for {problem_file}: Put generic error on queue. Exiting worker."
+            )
 
 
 def ground_problem(domain_file, problem_file):
     queue = mp.Queue(1)
     proc = mp.Process(target=_ground_worker, args=(domain_file, problem_file, queue))
     proc.start()
-    logging.info(f"Main process: Worker process for {problem_file} started (PID: {proc.pid}).")
+    logging.info(
+        f"Main process: Worker process for {problem_file} started (PID: {proc.pid})."
+    )
 
     task = None
     timed_out = False
-    received_data = None # To store what we get from queue
+    received_data = None  # To store what we get from queue
 
     logging.info(f"Main process: About to call proc.join() for {problem_file}.")
     proc.join(MAX_GROUND_TIME)
@@ -104,94 +124,145 @@ def ground_problem(domain_file, problem_file):
 
     if proc.is_alive():
         timed_out = True
-        logging.warning(f"Main process: Worker for {problem_file} grounding timed out after {MAX_GROUND_TIME}s. Terminating.")
+        logging.warning(
+            f"Main process: Worker for {problem_file} grounding timed out after {MAX_GROUND_TIME}s. Terminating."
+        )
         proc.terminate()
         proc.join(timeout=5)
         if proc.is_alive():
-            logging.warning(f"Main process: Worker for {problem_file} did not terminate gracefully after SIGTERM. Killing.")
+            logging.warning(
+                f"Main process: Worker for {problem_file} did not terminate gracefully after SIGTERM. Killing."
+            )
             proc.kill()
             proc.join(timeout=5)
             if proc.is_alive():
-                logging.error(f"Main process: Worker for {problem_file} could not be killed.")
+                logging.error(
+                    f"Main process: Worker for {problem_file} could not be killed."
+                )
     else:
         exit_code = proc.exitcode
-        logging.info(f"Main process: Worker for {problem_file} finished with exit code {exit_code}.")
+        logging.info(
+            f"Main process: Worker for {problem_file} finished with exit code {exit_code}."
+        )
         if exit_code == 0:
             try:
-                logging.info(f"Main process: Attempting queue.get() for {problem_file}.")
-                received_data = queue.get(block=True, timeout=10) # Increased timeout
-                logging.info(f"Main process: Received from queue for {problem_file}: {received_data}")
+                logging.info(
+                    f"Main process: Attempting queue.get() for {problem_file}."
+                )
+                received_data = queue.get(block=True, timeout=10)  # Increased timeout
+                logging.info(
+                    f"Main process: Received from queue for {problem_file}: {received_data}"
+                )
 
                 if received_data and isinstance(received_data, dict):
                     if received_data.get("type") == "file":
                         task_file_path = received_data.get("path")
                         if task_file_path and os.path.exists(task_file_path):
-                            logging.info(f"Main process: Loading task from file {task_file_path}.")
+                            logging.info(
+                                f"Main process: Loading task from file {task_file_path}."
+                            )
                             with open(task_file_path, "rb") as f:
                                 task = pickle.load(f)
-                            logging.info(f"Main process: Successfully loaded task from {task_file_path}. Type: {type(task)}.")
+                            logging.info(
+                                f"Main process: Successfully loaded task from {task_file_path}. Type: {type(task)}."
+                            )
                             try:
                                 os.remove(task_file_path)
-                                logging.info(f"Main process: Removed temporary task file {task_file_path}.")
+                                logging.info(
+                                    f"Main process: Removed temporary task file {task_file_path}."
+                                )
                             except Exception as e_remove:
-                                logging.warning(f"Main process: Could not remove temp task file {task_file_path}: {e_remove}")
+                                logging.warning(
+                                    f"Main process: Could not remove temp task file {task_file_path}: {e_remove}"
+                                )
                         else:
-                            logging.error(f"Main process: Task file path {task_file_path} not found or invalid.")
+                            logging.error(
+                                f"Main process: Task file path {task_file_path} not found or invalid."
+                            )
                             task = None
                     elif received_data.get("type") == "error":
-                        logging.error(f"Main process: Worker for {problem_file} reported error: {received_data.get('message')}")
+                        logging.error(
+                            f"Main process: Worker for {problem_file} reported error: {received_data.get('message')}"
+                        )
                         task = None
                     else:
-                        logging.error(f"Main process: Received unknown data structure from queue for {problem_file}: {received_data}")
+                        logging.error(
+                            f"Main process: Received unknown data structure from queue for {problem_file}: {received_data}"
+                        )
                         task = None
                 else:
-                    logging.error(f"Main process: Received unexpected or no data from queue for {problem_file}: {received_data}")
+                    logging.error(
+                        f"Main process: Received unexpected or no data from queue for {problem_file}: {received_data}"
+                    )
                     task = None
 
             except Empty:
-                logging.warning(f"Main process: Worker for {problem_file} finished (exit code 0) but queue was empty on get.")
+                logging.warning(
+                    f"Main process: Worker for {problem_file} finished (exit code 0) but queue was empty on get."
+                )
                 task = None
             except MemoryError as me_load:
-                logging.error(f"Main process: MemoryError loading task from file for {problem_file}: {me_load}")
-                task = None # Task remains None
+                logging.error(
+                    f"Main process: MemoryError loading task from file for {problem_file}: {me_load}"
+                )
+                task = None  # Task remains None
                 # If task_file_path was set, try to remove it
                 if received_data and received_data.get("type") == "file":
                     task_file_path_on_error = received_data.get("path")
-                    if task_file_path_on_error and os.path.exists(task_file_path_on_error):
+                    if task_file_path_on_error and os.path.exists(
+                        task_file_path_on_error
+                    ):
                         try:
                             os.remove(task_file_path_on_error)
-                            logging.info(f"Main process: Removed temporary task file {task_file_path_on_error} after MemoryError.")
+                            logging.info(
+                                f"Main process: Removed temporary task file {task_file_path_on_error} after MemoryError."
+                            )
                         except Exception as e_remove_err:
-                            logging.warning(f"Main process: Could not remove temp task file {task_file_path_on_error} after MemoryError: {e_remove_err}")
+                            logging.warning(
+                                f"Main process: Could not remove temp task file {task_file_path_on_error} after MemoryError: {e_remove_err}"
+                            )
             except Exception as e_get:
-                logging.error(f"Main process: Error processing item from queue for {problem_file}: {e_get}")
+                logging.error(
+                    f"Main process: Error processing item from queue for {problem_file}: {e_get}"
+                )
                 task = None
         else:
-            logging.error(f"Main process: Worker for {problem_file} grounding failed or exited with code {exit_code}.")
+            logging.error(
+                f"Main process: Worker for {problem_file} grounding failed or exited with code {exit_code}."
+            )
             task = None
 
     try:
         queue.close()
         queue.join_thread()
     except Exception as q_close_e:
-        logging.warning(f"Main process: Exception closing queue for {problem_file}: {q_close_e}")
+        logging.warning(
+            f"Main process: Exception closing queue for {problem_file}: {q_close_e}"
+        )
 
-    if task is not None and not timed_out: # Task is successfully loaded
+    if task is not None and not timed_out:  # Task is successfully loaded
         return task, False
-    return task, timed_out # task is None or timed_out
+    return task, timed_out  # task is None or timed_out
 
 
 def run_configuration(task, search_fun, heuristic_cls):
     heuristic = heuristic_cls(task)
-    plan, expansions = search_fun(task, heuristic, max_expansions=MAX_EXPANSIONS)
+    plan, expansions, evaluations = search_fun(
+        task,
+        heuristic,
+        max_expansions=MAX_EXPANSIONS,
+        max_evaluations=MAX_EVALUATIONS,
+    )
     solved = plan is not None
-    return solved, expansions
+    return solved, evaluations
 
 
 def evaluate():
-    logging.basicConfig(level=logging.INFO,
-                        format='%(asctime)s - %(process)d - %(levelname)s - %(message)s',
-                        handlers=[logging.StreamHandler(sys.stdout)])
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(process)d - %(levelname)s - %(message)s",
+        handlers=[logging.StreamHandler(sys.stdout)],
+    )
 
     logging.info(f"Temporary directory for tasks: {TEMP_DIR}")
 
@@ -214,30 +285,44 @@ def evaluate():
 
             task, timed_out = ground_problem(domain_file_path, prob)
 
-            logging.info(f"Main process: Returned from ground_problem for {prob}. Task is None: {task is None}, Timed out: {timed_out}")
+            logging.info(
+                f"Main process: Returned from ground_problem for {prob}. Task is None: {task is None}, Timed out: {timed_out}"
+            )
 
             if task is None:
                 if timed_out:
-                    logging.warning(f"Main process: Grounding timed out for {prob}. Skipping this problem.")
+                    logging.warning(
+                        f"Main process: Grounding timed out for {prob}. Skipping this problem."
+                    )
                 else:
-                    logging.error(f"Main process: Grounding failed or produced no task for {prob}. Skipping this problem.")
+                    logging.error(
+                        f"Main process: Grounding failed or produced no task for {prob}. Skipping this problem."
+                    )
                 continue
 
-            logging.info(f"Main process: Successfully received task for {prob}. Proceeding to run configurations.")
+            logging.info(
+                f"Main process: Successfully received task for {prob}. Proceeding to run configurations."
+            )
             for hname, hcls in HEURISTICS.items():
                 for sname, sfun in SEARCHES.items():
-                    logging.info(f"Main process:  Attempting config: {hname} with {sname} for problem {prob}")
+                    logging.info(
+                        f"Main process:  Attempting config: {hname} with {sname} for problem {prob}"
+                    )
                     try:
-                        solved, exp = run_configuration(task, sfun, hcls)
+                        solved, evals = run_configuration(task, sfun, hcls)
                         results[f"{hname}-{sname}"].append(
-                            exp if solved else MAX_EXPANSIONS
+                            evals if solved else MAX_EVALUATIONS
                         )
                     except MemoryError as me:
-                        logging.exception(f"Main process:  MemoryError during run_configuration for {prob} with {hname}-{sname}: {me}")
-                        results[f"{hname}-{sname}"].append(MAX_EXPANSIONS + 1)
+                        logging.exception(
+                            f"Main process:  MemoryError during run_configuration for {prob} with {hname}-{sname}: {me}"
+                        )
+                        results[f"{hname}-{sname}"].append(MAX_EVALUATIONS + 1)
                     except Exception as e:
-                        logging.exception(f"Main process:  Exception during run_configuration for {prob} with {hname}-{sname}: {e}")
-                        results[f"{hname}-{sname}"].append(MAX_EXPANSIONS + 1)
+                        logging.exception(
+                            f"Main process:  Exception during run_configuration for {prob} with {hname}-{sname}: {e}"
+                        )
+                        results[f"{hname}-{sname}"].append(MAX_EVALUATIONS + 1)
                     dump_results()
             plot_results(results)
 
@@ -245,25 +330,34 @@ def evaluate():
     # Clean up the temp directory at the very end
     try:
         import shutil
+
         shutil.rmtree(TEMP_DIR)
         logging.info(f"Removed temporary directory: {TEMP_DIR}")
     except Exception as e_rm_tempdir:
-        logging.warning(f"Could not remove temporary directory {TEMP_DIR}: {e_rm_tempdir}")
+        logging.warning(
+            f"Could not remove temporary directory {TEMP_DIR}: {e_rm_tempdir}"
+        )
 
 
 def plot_results(results):
     plt.figure()
-    limits = range(1, MAX_EXPANSIONS)
+    limits = range(1, MAX_EVALUATIONS)
     for name, runs in results.items():
         # if "h-ff" not in name: # for debugging
         #     continue
         solved_counts = []
         for lim in limits:
-            solved_counts.append(sum(1 for r in runs if isinstance(r, (int, float)) and r <= lim and r < MAX_EXPANSIONS))
+            solved_counts.append(
+                sum(
+                    1
+                    for r in runs
+                    if isinstance(r, (int, float)) and r <= lim and r < MAX_EVALUATIONS
+                )
+            )
         plt.plot(list(limits), solved_counts, label=name)
     plt.xlabel("Node evaluations")
     plt.ylabel("Solved instances")
-    plt.legend(fontsize='small')
+    plt.legend(fontsize="small")
     plt.title("Planning Performance")
     plt.grid(True)
     plt.tight_layout()

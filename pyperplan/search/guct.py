@@ -16,10 +16,10 @@
 #
 """Greedy UCT style search algorithms."""
 
+from dataclasses import dataclass
 import heapq
 import logging
 import math
-from dataclasses import dataclass
 
 from . import searchspace
 
@@ -31,11 +31,11 @@ class _Stats:
     m2: float
     min_val: float
     max_val: float
-    log_sum:  float
+    log_sum: float
 
 
 def _make_stats(value: float) -> _Stats:
-    v = max(value, 1e-9)                       # protect log(0)
+    v = max(value, 1e-9)  # protect log(0)
     return _Stats(1, value, 0.0, value, value, math.log(v))
 
 
@@ -58,6 +58,7 @@ def _variance(stats: _Stats) -> float:
 def _stddev(stats: _Stats) -> float:
     return math.sqrt(_variance(stats))
 
+
 def _a_hat(stats: _Stats) -> float:
     if stats.visits < 2 or stats.max_val <= 0:
         return 1.0
@@ -66,13 +67,19 @@ def _a_hat(stats: _Stats) -> float:
         return 1.0
     return 1.0 / denom
 
+
 def _norm_quantile(t):
     """http://m-hikari.com/ams/ams-2014/ams-85-88-2014/epureAMS85-88-2014.pdf"""
     alpha = 1 - 1 / t
 
-    q = 10 * math.log(1 - math.log(-math.log(alpha) / math.log(2)) / math.log(22)) / math.log(41)
+    q = (
+        10
+        * math.log(1 - math.log(-math.log(alpha) / math.log(2)) / math.log(22))
+        / math.log(41)
+    )
 
     return q
+
 
 def _score_lcb(stats: _Stats, total: int) -> float:
     n = stats.visits
@@ -99,7 +106,9 @@ def _score_lcb_uniform(stats: _Stats, total: int) -> float:
     n = stats.visits
     if total == 0:
         return float("-inf")
-    return (stats.max_val + stats.min_val) / 2 - (stats.max_val - stats.min_val) * math.sqrt(6 * n * math.log(total))
+    return (stats.max_val + stats.min_val) / 2 - (
+        stats.max_val - stats.min_val
+    ) * math.sqrt(6 * n * math.log(total))
 
 
 def _score_lcb_power(stats: _Stats, total: int) -> float:
@@ -107,22 +116,35 @@ def _score_lcb_power(stats: _Stats, total: int) -> float:
     a_hat = _a_hat(stats)
     if total == 0:
         return float("-inf")
-    return (stats.max_val * a_hat) / (a_hat + 1) - stats.max_val * math.sqrt(6 * n * math.log(total))
+    return (stats.max_val * a_hat) / (a_hat + 1) - stats.max_val * math.sqrt(
+        6 * n * math.log(total)
+    )
+
 
 def _score_lcb_clt(stats: _Stats, total: int) -> float:
     n = stats.visits
     if total <= 1 or n == 0:
         return float("-inf")
-    return stats.mean - _norm_quantile(total) * math.sqrt(_variance(stats)/n)
+    return stats.mean - _norm_quantile(total) * math.sqrt(_variance(stats) / n)
 
 
-def _guct_search(task, heuristic, score_fun, max_expansions=None):
+def _guct_search(task, heuristic, score_fun, max_expansions=None, max_evaluations=None):
+    """Generic Greedy UCT-style search.
+
+    Returns a tuple ``(plan, expansions, evaluations)`` where ``plan`` is the
+    list of operators leading to the goal or ``None`` if no plan was found.
+    ``expansions`` counts expanded nodes and ``evaluations`` counts heuristic
+    evaluations. The search stops after reaching ``max_expansions`` or
+    ``max_evaluations`` if these limits are given.
+    """
+
     open_list = []
     node_info = {}
     tie = 0
 
     root = searchspace.make_root_node(task.initial_state)
     init_h = heuristic(root)
+    evaluations = 1
     node_info[root] = _make_stats(init_h)
     heapq.heappush(open_list, (init_h, tie, root))
     tie += 1
@@ -132,10 +154,13 @@ def _guct_search(task, heuristic, score_fun, max_expansions=None):
     while open_list:
         if max_expansions is not None and expansions >= max_expansions:
             break
+        if max_evaluations is not None and evaluations >= max_evaluations:
+            break
         score, _, node = heapq.heappop(open_list)
         parent_stats = node_info.get(node)
         if parent_stats is None:
             parent_stats = _make_stats(heuristic(node))
+            evaluations += 1
             node_info[node] = parent_stats
         parent_stats.visits += 1
         parent_visits = parent_stats.visits
@@ -144,11 +169,16 @@ def _guct_search(task, heuristic, score_fun, max_expansions=None):
         if task.goal_reached(node.state):
             logging.info("Goal reached. Start extraction of solution.")
             logging.info("%d Nodes expanded" % expansions)
-            return node.extract_solution(), expansions
+            return node.extract_solution(), expansions, evaluations
 
         for op, succ_state in task.get_successor_states(node.state):
+            if max_evaluations is not None and evaluations >= max_evaluations:
+                break
             succ = searchspace.make_child_node(node, op, succ_state)
             h_val = heuristic(succ)
+            evaluations += 1
+            if max_evaluations is not None and evaluations >= max_evaluations:
+                break
             stats = node_info.get(succ)
             if stats is None:
                 stats = _make_stats(h_val)
@@ -159,39 +189,55 @@ def _guct_search(task, heuristic, score_fun, max_expansions=None):
             heapq.heappush(open_list, (ucb, tie, succ))
             tie += 1
 
+        if max_evaluations is not None and evaluations >= max_evaluations:
+            break
+
     logging.info("No operators left. Task unsolvable or limit reached.")
     logging.info("%d Nodes expanded" % expansions)
-    return None, expansions
+    return None, expansions, evaluations
 
-def guct_search(task, heuristic, max_expansions=None):
+
+def guct_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using UCB1-Normal."""
 
-    return _guct_search(task, heuristic, _score_lcb, max_expansions)
+    return _guct_search(task, heuristic, _score_lcb, max_expansions, max_evaluations)
 
-def guct_normal_search(task, heuristic, max_expansions=None):
+
+def guct_normal_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using UCB1-Normal."""
 
-    return _guct_search(task, heuristic, _score_lcb_normal, max_expansions)
+    return _guct_search(
+        task, heuristic, _score_lcb_normal, max_expansions, max_evaluations
+    )
 
 
-def guct_normal2_search(task, heuristic, max_expansions=None):
+def guct_normal2_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using UCB1-Normal2."""
 
-    return _guct_search(task, heuristic, _score_lcb_normal2, max_expansions)
+    return _guct_search(
+        task, heuristic, _score_lcb_normal2, max_expansions, max_evaluations
+    )
 
 
-def guct_uniform_search(task, heuristic, max_expansions=None):
+def guct_uniform_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using LCB1-Uniform."""
 
-    return _guct_search(task, heuristic, _score_lcb_uniform, max_expansions)
+    return _guct_search(
+        task, heuristic, _score_lcb_uniform, max_expansions, max_evaluations
+    )
 
 
-def guct_power_search(task, heuristic, max_expansions=None):
+def guct_power_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using LCB1-Power."""
 
-    return _guct_search(task, heuristic, _score_lcb_power, max_expansions)
+    return _guct_search(
+        task, heuristic, _score_lcb_power, max_expansions, max_evaluations
+    )
 
-def guct_clt_search(task, heuristic, max_expansions=None):
+
+def guct_clt_search(task, heuristic, max_expansions=None, max_evaluations=None):
     """GUCT search variant using LCB1-Power."""
 
-    return _guct_search(task, heuristic, _score_lcb_clt, max_expansions)
+    return _guct_search(
+        task, heuristic, _score_lcb_clt, max_expansions, max_evaluations
+    )
